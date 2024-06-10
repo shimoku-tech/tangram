@@ -1,45 +1,76 @@
 from boto3 import client
 from shimoku_tangram.logging import init_logger
-from gzip import compress as compress_f, uncompress
+from gzip import compress as compress_f, decompress
 import json
 
 logger = init_logger(__name__)
+
+def get_s3_client():
+    return client('s3')
+
+def create_bucket(
+    bucket: str,
+    region: str = 'eu-west-1'
+) -> bool:
+    s3 = get_s3_client()
+    response_code = s3.create_bucket(
+        Bucket=bucket,
+        CreateBucketConfiguration={
+            'LocationConstraint': region
+        }
+    )['ResponseMetadata']['HTTPStatusCode']
+    return response_code < 300 and response_code >= 200
+
+def bucket_exists(
+    bucket: str
+) -> bool:
+    s3 = get_s3_client()
+    try:
+        s3.head_bucket(Bucket=bucket)
+        return True
+    except s3.exceptions.ClientError:
+        return False
+
+def delete_bucket(
+    bucket: str,
+) -> bool:
+    s3 = get_s3_client()
+    response_code = s3.delete_bucket(
+        Bucket=bucket,
+    )['ResponseMetadata']['HTTPStatusCode']
+    return response_code < 300 and response_code >= 200
+
+def list_objects_metadata(
+    bucket: str,
+    prefix: str = ''
+) -> list:
+    s3 = get_s3_client()
+    response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+    if 'Contents' not in response:
+        return []
+    return response['Contents']
 
 def get_object(
     bucket: str, 
     key: str,
     compressed: bool = True
 ) -> bytes:
-    s3 = client('s3')
+    s3 = get_s3_client()
     response = s3.get_object(Bucket=bucket, Key=key)
     if compressed:    
-        return uncompress(response['Body'].read())
+        return decompress(response['Body'].read())
     else:
         return response['Body'].read()
-
-def list_objects(
-    bucket: str,
-    prefix: str = '',
-    compressed: bool = True
-) -> list:
-    s3 = client('s3')
-    response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
-    if 'Contents' not in response:
-        return []
-    return [
-        obj['Body'].read() if compressed else uncompress(obj['Body'].read())
-        for obj in response['Contents']
-    ]
 
 def put_object(
     bucket: str, 
     key: str, 
     body: bytes,
-    compress: bool = False
+    compress: bool = True
 ) -> bool:
     if compress:
         body = compress_f(body)
-    s3 = client('s3')
+    s3 = get_s3_client()
     response_code = s3.put_object(
         Bucket=bucket, Key=key, Body=body
     )['ResponseMetadata']['HTTPStatusCode']
@@ -49,7 +80,7 @@ def delete_object(
     bucket: str, 
     key: str
 ) -> bool:
-    s3 = client('s3')
+    s3 = get_s3_client() 
     response_code = s3.delete_object(
         Bucket=bucket, Key=key
     )['ResponseMetadata']['HTTPStatusCode']
@@ -60,10 +91,8 @@ def clear_path(
     prefix: str = ''
 ) -> bool:
     result = True
-    for obj in list_objects(bucket, prefix):
-        if not delete_object(bucket, obj['Key']):
-            result = False
-            (f'Failed to delete {obj["Key"]}') 
+    for obj in list_objects_metadata(bucket, prefix):
+        result = result and delete_object(bucket, obj['Key'])
     return result
 
 def get_text_object(
@@ -73,17 +102,6 @@ def get_text_object(
     compressed: bool = True
 ) -> str:
     return get_object(bucket, key, compressed).decode(encoding)
-
-def list_text_objects(
-    bucket: str,
-    prefix: str = '',
-    encoding: str = 'utf-8',
-    compressed: bool = True
-) -> list:
-    return [
-        obj.decode(encoding) for obj in 
-        list_objects(bucket, prefix, compressed)
-    ]
 
 def put_text_object(
     bucket: str, 
@@ -99,17 +117,7 @@ def get_json_object(
     key: str,
     compressed: bool = True
 ) -> dict:
-    return json.loads(get_text_object(bucket, key, compressed))
-
-def list_json_objects(
-    bucket: str,
-    prefix: str = '',
-    compressed: bool = True
-) -> list:
-    return [
-        json.loads(obj) for obj in 
-        list_text_objects(bucket, prefix, compressed)
-    ]
+    return json.loads(get_text_object(bucket, key, compressed=compressed))
 
 def put_json_object(
     bucket: str, 
@@ -117,4 +125,4 @@ def put_json_object(
     body: dict,
     compress: bool = True
 ) -> bool:
-    return put_text_object(bucket, key, json.dumps(body), compress) 
+    return put_text_object(bucket, key, json.dumps(body), compress=compress) 
