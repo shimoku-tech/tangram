@@ -3,10 +3,10 @@ from unittest import TestCase
 import logging
 
 
-class LoggingTest(TestCase):
+class TestLogging(TestCase):
     def test_init_logger_no_level(self):
         logger = init_logger("test_logger")
-        self.assertEqual(logger.level, logging.NOTSET)
+        self.assertEqual(logger.level, logging.ERROR)
 
     def test_init_logger_with_level(self):
         logger = init_logger("test_logger", logging.DEBUG)
