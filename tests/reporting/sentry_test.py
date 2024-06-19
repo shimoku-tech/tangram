@@ -3,7 +3,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 
-class SentrySetupTest(TestCase):
+class TestSentrySetup(TestCase):
     @patch("shimoku_tangram.reporting.sentry.AwsLambdaIntegration")
     @patch("shimoku_tangram.reporting.sentry.init")
     @patch("shimoku_tangram.reporting.sentry.getenv")
