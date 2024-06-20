@@ -2,6 +2,8 @@ from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 import logging
 
+patch_all()
+
 class XRayFilter(logging.Filter):
     def filter(self, record):
         segment = xray_recorder.current_segment()
@@ -28,7 +30,6 @@ def init_logger(name: str, level: int | None = None) -> logging.Logger:
     ch.addFilter(XRayFilter())
 
     logger.addHandler(ch)
-    patch_all()
     return logger
 
 
