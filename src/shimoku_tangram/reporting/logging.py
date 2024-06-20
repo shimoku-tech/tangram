@@ -17,6 +17,11 @@ class XRayFilter(logging.Filter):
 
 def init_logger(name: str, level: int | None = None) -> logging.Logger:
     logger = logging.getLogger(name)
+    segment = xray_recorder.current_segment()
+
+    if not segment:
+        xray_recorder.begin_segment(name)
+        
     if level is not None:
         logger.setLevel(level)
     else:
