@@ -5,10 +5,10 @@ from unittest.mock import patch
 
 class TestSSM(TestCase):
     @patch("shimoku_tangram.secrets.ssm.client")
-    def test_put_secret(self, mock_client):
+    def test_put_parameter(self, mock_client):
         return_value = {"ResponseMetadata": {"HTTPStatusCode": 200}}
         mock_client.return_value.put_parameter.return_value = return_value
-        response = ssm.put_secret("test", "test")
+        response = ssm.put_parameter("test", "test")
 
         self.assertEqual(response, return_value)
 
@@ -17,10 +17,10 @@ class TestSSM(TestCase):
         )
 
     @patch("shimoku_tangram.secrets.ssm.client")
-    def test_get_secret(self, mock_client):
+    def test_get_parameter(self, mock_client):
         return_value = {"Parameter": {"Value": "test"}}
         mock_client.return_value.get_parameter.return_value = return_value
-        response = ssm.get_secret("test")
+        response = ssm.get_parameter("test")
 
         self.assertEqual(response, "test")
 
@@ -29,10 +29,10 @@ class TestSSM(TestCase):
         )
 
     @patch("shimoku_tangram.secrets.ssm.client")
-    def test_delete_secret(self, mock_client):
+    def test_delete_parameter(self, mock_client):
         return_value = {"ResponseMetadata": {"HTTPStatusCode": 200}}
         mock_client.return_value.delete_parameter.return_value = return_value
-        response = ssm.delete_secret("test")
+        response = ssm.delete_parameter("test")
 
         self.assertEqual(response, return_value)
 
