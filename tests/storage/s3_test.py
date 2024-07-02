@@ -1,8 +1,18 @@
+import pandas as pd
 from shimoku_tangram.storage import s3
+from collections import namedtuple
 from gzip import compress
 from io import BytesIO
+import json
+import pickle
+import re
+from uuid import UUID
 from unittest import TestCase
 from unittest.mock import patch
+
+
+# Object to be used in the tests
+TestObject = namedtuple('TestObject', ['attribute'])
 
 
 class TestS3(TestCase):
@@ -39,6 +49,17 @@ class TestS3(TestCase):
         )
 
     @patch("shimoku_tangram.storage.s3.client")
+    def test_list_objects_metadata_no_contents(self, mock_client):
+        mock_client.return_value.list_objects_v2.return_value = {}
+        response = s3.list_objects_metadata("test")
+
+        self.assertEqual(response, [])
+
+        mock_client.return_value.list_objects_v2.assert_called_once_with(
+            Bucket="test", Prefix=""
+        )
+
+    @patch("shimoku_tangram.storage.s3.client")
     def test_list_objects_key(self, mock_client):
         mock_client.return_value.list_objects_v2.return_value = {
             "Contents": [{"Key": "test"}]
@@ -52,14 +73,72 @@ class TestS3(TestCase):
         )
 
     @patch("shimoku_tangram.storage.s3.client")
-    def test_list_objects_metadata_no_contents(self, mock_client):
-        mock_client.return_value.list_objects_v2.return_value = {}
-        response = s3.list_objects_metadata("test")
+    def test_list_single_object_key_single_file(self, mock_client):
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "file1"}]
+        }
 
-        self.assertEqual(response, [])
+        response = s3.list_single_object_key("", "")
+
+        self.assertEqual(response, "file1")
 
         mock_client.return_value.list_objects_v2.assert_called_once_with(
-            Bucket="test", Prefix=""
+            Bucket="", Prefix=""
+        )
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_list_single_object_key_empty(self, mock_client):
+        mock_client.return_value.list_objects_v2.return_value = {}
+
+        with self.assertRaises(ValueError) as context:
+            s3.list_single_object_key("", "")
+
+        self.assertEqual(str(context.exception), "File not found.")
+
+        mock_client.return_value.list_objects_v2.assert_called_once_with(
+            Bucket="", Prefix=""
+        )
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_list_single_object_key_multiple_files(self, mock_client):
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "file1"}, {"Key": "file2"}]
+        }
+
+        with self.assertRaises(ValueError) as context:
+            s3.list_single_object_key("", "")
+
+        self.assertEqual(str(context.exception), "Multiple files found.")
+
+        mock_client.return_value.list_objects_v2.assert_called_once_with(
+            Bucket="", Prefix=""
+        )
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_list_multiple_objects_keys_multiple_files(self, mock_client):
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "file1"}, {"Key": "file2"}]
+        }
+
+        response = s3.list_multiple_objects_keys("", "")
+
+        self.assertEqual(response, ["file1", "file2"])
+
+        mock_client.return_value.list_objects_v2.assert_called_once_with(
+            Bucket="", Prefix=""
+        )
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_list_multiple_objects_keys_empty(self, mock_client):
+        mock_client.return_value.list_objects_v2.return_value = {}
+
+        with self.assertRaises(ValueError) as context:
+            s3.list_multiple_objects_keys("", "")
+
+        self.assertEqual(str(context.exception), "No files found.")
+
+        mock_client.return_value.list_objects_v2.assert_called_once_with(
+            Bucket="", Prefix=""
         )
 
     @patch("shimoku_tangram.storage.s3.client")
@@ -293,3 +372,279 @@ class TestS3(TestCase):
         mock_client.return_value.put_object.assert_called_once_with(
             Bucket="test", Key="test", Body=compress(b'{"test": "test"}')
         )
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_pkl_object(self, mock_client):
+        expected = TestObject(attribute="value")
+
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(compress(pickle.dumps(expected)))
+        }
+
+        response = s3.get_pkl_object("", "")
+
+        self.assertEqual(response, expected)
+
+        mock_client.return_value.get_object.assert_called_once_with(
+            Bucket="", Key="")
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_put_pkl_object(self, mock_client):
+        expected = TestObject(attribute="value")
+
+        mock_client.return_value.put_object.return_value = {
+            "ResponseMetadata": {"HTTPStatusCode": 200}
+        }
+
+        response = s3.put_pkl_object("", "", expected)
+
+        self.assertTrue(response)
+
+    def test_get_extension_compressed(self):
+        expected = 'pkl'
+
+        key = 'path/file.pkl.gz'
+        actual = s3.get_extension(key, compressed=True)
+
+        self.assertEqual(actual, expected)
+
+    def test_get_extension_uncompressed(self):
+        expected = 'json'
+
+        key = 'path/file.json'
+        actual = s3.get_extension(key, compressed=False)
+
+        self.assertEqual(actual, expected)
+
+    def test_is_compressed_true(self):
+        expected = True
+
+        key = 'path/file.json.gz'
+        actual = s3.is_compressed(key)
+
+        self.assertEqual(actual, expected)
+
+    def test_is_compressed_false(self):
+        expected = False
+
+        key = 'path/file.csv'
+        actual = s3.is_compressed(key)
+
+        self.assertEqual(actual, expected)
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_json_object_single_json_uncompressed(self, mock_client):
+        expected = {"key": "value"}
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.json"}]
+        }
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(json.dumps(expected).encode('utf-8'))
+        }
+        actual = s3.get_single_json_object("", "")
+
+        self.assertEqual(actual, expected)
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_json_object_single_json_compressed(self, mock_client):
+        expected = {"key": "value"}
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.json.gz"}]
+        }
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(compress(json.dumps(expected).encode('utf-8')))
+        }
+        actual = s3.get_single_json_object("", "")
+
+        self.assertEqual(actual, expected)
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_json_object_multiples_json(self, mock_client):
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.json"}, {"Key": "path/file2.json"}]
+        }
+
+        with self.assertRaises(ValueError) as context:
+            s3.get_single_json_object("", "")
+
+        self.assertEqual(str(context.exception), "Multiple files found.")
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_json_object_single_nojson(self, mock_client):
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.csv"}]
+        }
+
+        with self.assertRaises(ValueError) as context:
+            s3.get_single_json_object("", "")
+
+        self.assertEqual(str(context.exception), "File is not a json file.")
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_pkl_object_single_pkl_uncompressed(self, mock_client):
+        expected = TestObject(attribute="value")
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.pkl"}]
+        }
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(pickle.dumps(expected))
+        }
+        actual = s3.get_single_pkl_object("", "")
+
+        self.assertEqual(actual, expected)
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_pkl_object_single_pkl_compressed(self, mock_client):
+        expected = TestObject(attribute="value")
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.pkl.gz"}]
+        }
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(compress(pickle.dumps(expected)))
+        }
+        actual = s3.get_single_pkl_object("", "")
+
+        self.assertEqual(actual, expected)
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_pkl_object_multiples_pkl(self, mock_client):
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.pkl"}, {"Key": "path/file2.pkl"}]
+        }
+
+        with self.assertRaises(ValueError) as context:
+            s3.get_single_pkl_object("", "")
+
+        self.assertEqual(str(context.exception), "Multiple files found.")
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_single_pkl_object_single_nopkl(self, mock_client):
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.csv"}]
+        }
+
+        with self.assertRaises(ValueError) as context:
+            s3.get_single_pkl_object("", "")
+
+        self.assertEqual(str(context.exception), "File is not a pickle file.")
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_multiple_csv_objects_single_csv_uncompressed(self, mock_client):
+        expected = pd.DataFrame({"1": [1, 2, 3, 4, 5]})
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.csv"}]
+        }
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(expected.to_csv(index=False).encode('utf-8'))
+        }
+        actual = s3.get_multiple_csv_objects("", "")
+
+        self.assertTrue(actual.equals(expected))
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_multiple_csv_objects_single_csv_compressed(self, mock_client):
+        expected = pd.DataFrame({"1": [1, 2, 3, 4, 5]})
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file.csv.gz"}]
+        }
+        mock_client.return_value.get_object.return_value = {
+            "Body": BytesIO(compress(expected.to_csv(index=False).encode('utf-8')))
+        }
+        actual = s3.get_multiple_csv_objects("", "")
+
+        self.assertTrue(actual.equals(expected))
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_multiple_csv_objects_multiple_csv(self, mock_client):
+        df1 = pd.DataFrame({"1": [1, 2, 3, 4, 5]})
+        df2 = pd.DataFrame({"1": [6, 7, 8, 9, 10]})
+        expected = pd.concat([df1, df2]).reset_index(drop=True)
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file1.csv"}, {"Key": "path/file2.csv"}]
+        }
+        mock_client.return_value.get_object.side_effect = [
+            {"Body": BytesIO(df1.to_csv(index=False).encode('utf-8'))},
+            {"Body": BytesIO(df2.to_csv(index=False).encode('utf-8'))}]
+        actual = s3.get_multiple_csv_objects("", "")
+
+        self.assertTrue(actual.equals(expected))
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_get_multiple_csv_objects_nocsv(self, mock_client):
+
+        mock_client.return_value.list_objects_v2.return_value = {
+            "Contents": [{"Key": "path/file1.csv"}, {"Key": "path/file2.json"}]
+        }
+
+        with self.assertRaises(ValueError) as context:
+            s3.get_multiple_csv_objects("", "")
+
+        self.assertEqual(str(context.exception), "Not all files are csv files.")
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_put_single_json_object(self, mock_client):
+        expected = {"key": "value"}
+        def _is_valid_key(string: str) -> bool:
+            try:
+                return bool(re.match(
+                    r'^path/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.json\.gz$',
+                    string) and UUID(string[5:-8], version=4))
+            except ValueError:
+                return False
+
+        mock_client.return_value.put_object.return_value = {
+            "ResponseMetadata": {"HTTPStatusCode": 200}
+        }
+
+        response = s3.put_single_json_object("", "path", expected)
+
+        self.assertTrue(_is_valid_key(response))
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_put_single_pkl_object(self, mock_client):
+        expected = TestObject(attribute="value")
+        def _is_valid_key(string: str) -> bool:
+            try:
+                return bool(re.match(
+                    r'^path/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.pkl\.gz$',
+                    string) and UUID(string[5:-7], version=4))
+            except ValueError:
+                return False
+
+        mock_client.return_value.put_object.return_value = {
+            "ResponseMetadata": {"HTTPStatusCode": 200}
+        }
+
+        response = s3.put_single_pkl_object("", "path", expected)
+
+        self.assertTrue(_is_valid_key(response))
+
+    @patch("shimoku_tangram.storage.s3.client")
+    def test_put_multiple_csv_objects(self, mock_client):
+        expected = pd.DataFrame({"1": [1, 2, 3, 4, 5]})
+        def _is_valid_key(string: str) -> bool:
+            try:
+                return bool(re.match(
+                    r'^path/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.csv\.gz$',
+                    string) and UUID(string[5:-7], version=4))
+            except ValueError:
+                return False
+
+        mock_client.return_value.put_object.return_value = {
+            "ResponseMetadata": {"HTTPStatusCode": 200}
+        }
+
+        response = s3.put_multiple_csv_objects("", "path", expected)
+
+        self.assertTrue(all([_is_valid_key(i) for i in response]))
