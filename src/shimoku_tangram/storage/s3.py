@@ -6,6 +6,7 @@ from pathlib import Path
 import pickle
 from typing import Dict, List
 import uuid
+import csv
 
 from boto3 import client
 import pandas as pd
@@ -171,7 +172,6 @@ def get_single_pkl_object(bucket: str, prefix: str):
     return get_pkl_object(bucket, key=key, compressed=is_compressed(key))
 
 
-
 def get_multiple_csv_objects(bucket: str, prefix: str) -> pd.DataFrame:
     """
     Retrieve multiple csv objects from an S3 bucket given a folder and
@@ -244,6 +244,6 @@ def put_multiple_csv_objects(
     for i, df in enumerate(_generate_slices(body, size_row_slice)):
         key = os.path.join(prefix, str(uuid.uuid4()) + '.csv.gz')
         list_keys.append(key)
-        put_text_object(bucket, key=key, body=df.to_csv(index=False), compress=True)
+        put_text_object(bucket, key=key, body=df.to_csv(index=False, quoting=csv.QUOTE_ALL), compress=True)
 
     return list_keys
