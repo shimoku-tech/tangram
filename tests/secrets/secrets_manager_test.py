@@ -15,7 +15,7 @@ class TestSecretsManager(TestCase):
         mock_client.return_value.create_secret.assert_called_once_with(
             Name="test", SecretString="test"
         )
-    
+
     @patch("shimoku_tangram.secrets.secrets_manager.boto3.client")
     def test_put_secret_dict(self, mock_client):
         return_value = {"ResponseMetadata": {"HTTPStatusCode": 200}}
@@ -36,17 +36,21 @@ class TestSecretsManager(TestCase):
 
         self.assertEqual(response, "test")
 
-        mock_client.return_value.get_secret_value.assert_called_once_with(SecretId="test")
+        mock_client.return_value.get_secret_value.assert_called_once_with(
+            SecretId="test"
+        )
 
     @patch("shimoku_tangram.secrets.secrets_manager.boto3.client")
     def test_get_secret_dict(self, mock_client):
         return_value = {"SecretString": '{"test": "test"}'}
         mock_client.return_value.get_secret_value.return_value = return_value
         response = secrets_manager.get_secret("test", is_dict=True)
-        
+
         self.assertEqual(response, {"test": "test"})
 
-        mock_client.return_value.get_secret_value.assert_called_once_with(SecretId="test")
+        mock_client.return_value.get_secret_value.assert_called_once_with(
+            SecretId="test"
+        )
 
     @patch("shimoku_tangram.secrets.secrets_manager.boto3.client")
     def test_delete_secret(self, mock_client):
