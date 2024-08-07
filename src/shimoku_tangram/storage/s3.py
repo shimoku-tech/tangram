@@ -6,6 +6,7 @@ from pathlib import Path
 import pickle
 from typing import Dict, List
 import uuid
+import csv
 
 from boto3 import client
 import pandas as pd
@@ -258,6 +259,6 @@ def put_multiple_csv_objects(
     for df in _generate_slices(body, max(size_row_slice, 1)):
         key = os.path.join(prefix, str(uuid.uuid4()) + ".csv.gz")
         list_keys.append(key)
-        put_text_object(bucket, key=key, body=df.to_csv(index=False), compress=True)
+        put_text_object(bucket, key=key, body=df.to_csv(index=False, quoting=csv.QUOTE_ALL), compress=True)
 
     return list_keys
