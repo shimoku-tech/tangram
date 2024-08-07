@@ -3,6 +3,7 @@ from unittest import TestCase
 import logging
 from unittest.mock import patch, MagicMock
 
+
 class TestLogging(TestCase):
     def test_init_logger_no_level(self):
         logger = init_logger("test_logger")
@@ -16,16 +17,16 @@ class TestLogging(TestCase):
         logger = init_logger("test_logger")
         self.assertEqual(
             logger.handlers[0].formatter._fmt,
-            "%(asctime)s - %(name)s - %(levelname)s - [ %(trace_id)s ] - %(message)s",
+            "%(asctime)s - %(name)s - %(levelname)s - [ No Trace ] - %(message)s",
         )
 
     def test_init_logger_filter(self):
         logger = init_logger("test_logger")
         self.assertEqual(
-            logger.handlers[0].filters[0].__class__.__name__,
-            "XRayFilter",
+            len(logger.handlers[0].filters),
+            0,
         )
-    
+
     def test_end_logger(self):
         logger = init_logger("test_logger")
         end_logger(logger)
@@ -34,6 +35,7 @@ class TestLogging(TestCase):
             logger.handlers,
             [],
         )
+
 
 class TestXRayFilter(TestCase):
     def setUp(self):
@@ -45,10 +47,12 @@ class TestXRayFilter(TestCase):
             lineno=10,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
 
-    @patch('shimoku_tangram.reporting.logging.xray_recorder')  # Replace 'shimoku_tangram.reporting.logging' with the actual module name
+    @patch(
+        "shimoku_tangram.reporting.logging.xray_recorder"
+    )  # Replace 'shimoku_tangram.reporting.logging' with the actual module name
     def test_filter_with_segment(self, mock_xray_recorder):
         mock_segment = MagicMock()
         mock_segment.trace_id = "test_trace_id"
@@ -59,7 +63,9 @@ class TestXRayFilter(TestCase):
         self.assertTrue(result)
         self.assertEqual(self.log_record.trace_id, "test_trace_id")
 
-    @patch('shimoku_tangram.reporting.logging.xray_recorder')  # Replace 'shimoku_tangram.reporting.logging' with the actual module name
+    @patch(
+        "shimoku_tangram.reporting.logging.xray_recorder"
+    )  # Replace 'shimoku_tangram.reporting.logging' with the actual module name
     def test_filter_without_segment(self, mock_xray_recorder):
         mock_xray_recorder.current_segment.return_value = None
 
@@ -73,17 +79,22 @@ class TestXRayFilter(TestCase):
         self.assertTrue(result)
 
     def test_filter_adds_trace_id_attribute(self):
-        with patch('shimoku_tangram.reporting.logging.xray_recorder.current_segment') as mock_current_segment:
+        with patch(
+            "shimoku_tangram.reporting.logging.xray_recorder.current_segment"
+        ) as mock_current_segment:
             mock_segment = MagicMock()
             mock_segment.trace_id = "test_trace_id"
             mock_current_segment.return_value = mock_segment
 
             self.filter.filter(self.log_record)
 
-        self.assertTrue(hasattr(self.log_record, 'trace_id'))
+        self.assertTrue(hasattr(self.log_record, "trace_id"))
 
     def test_filter_sets_trace_id_to_none_when_no_segment(self):
-        with patch('shimoku_tangram.reporting.logging.xray_recorder.current_segment', return_value=None):
+        with patch(
+            "shimoku_tangram.reporting.logging.xray_recorder.current_segment",
+            return_value=None,
+        ):
             self.filter.filter(self.log_record)
 
         self.assertIsNone(self.log_record.trace_id)

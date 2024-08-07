@@ -44,8 +44,9 @@ def list_single_object_key(bucket: str, prefix: str) -> str:
     """
     list_keys = list_objects_key(bucket, prefix)
 
-    list_keys = [path for path in list_keys if
-                 Path(path).resolve() != Path(prefix).resolve()]
+    list_keys = [
+        path for path in list_keys if Path(path).resolve() != Path(prefix).resolve()
+    ]
 
     if len(list_keys) == 0:
         raise ValueError(f"File not found.")
@@ -62,7 +63,7 @@ def list_multiple_objects_keys(bucket: str, prefix: str) -> List[str]:
     """
     list_keys = list_objects_key(bucket, prefix)
 
-    list_keys = [path for path in list_keys if not path.endswith('/')]
+    list_keys = [path for path in list_keys if not path.endswith("/")]
 
     if len(list_keys) == 0:
         raise ValueError("No files found.")
@@ -143,7 +144,7 @@ def get_extension(key: str, compressed: bool = True) -> str:
 
 
 def is_compressed(key: str) -> bool:
-    compressed_extensions = ['.gz']
+    compressed_extensions = [".gz"]
     return any(key.endswith(ext) for ext in compressed_extensions)
 
 
@@ -154,7 +155,7 @@ def get_single_json_object(bucket: str, prefix: str):
     key = list_single_object_key(bucket, prefix)
 
     if get_extension(key, compressed=is_compressed(key)) != "json":
-        raise ValueError(f"File is not a json file.")
+        raise ValueError("File is not a json file.")
 
     return get_json_object(bucket, key=key, compressed=is_compressed(key))
 
@@ -166,10 +167,9 @@ def get_single_pkl_object(bucket: str, prefix: str):
     key = list_single_object_key(bucket, prefix)
 
     if get_extension(key, compressed=is_compressed(key)) != "pkl":
-        raise ValueError(f"File is not a pickle file.")
+        raise ValueError("File is not a pickle file.")
 
     return get_pkl_object(bucket, key=key, compressed=is_compressed(key))
-
 
 
 def get_multiple_csv_objects(bucket: str, prefix: str) -> pd.DataFrame:
@@ -179,19 +179,26 @@ def get_multiple_csv_objects(bucket: str, prefix: str) -> pd.DataFrame:
     """
     list_keys = list_multiple_objects_keys(bucket, prefix)
 
-    list_ext = [get_extension(key=key, compressed=is_compressed(key)) for key in list_keys]
+    list_ext = [
+        get_extension(key=key, compressed=is_compressed(key)) for key in list_keys
+    ]
     if not all(ext == "csv" for ext in list_ext):
         raise ValueError("Not all files are csv files.")
 
     list_df = []
     for key in list_keys:
-        list_df += [pd.read_csv(
-            io.StringIO(get_text_object(bucket, key=key, compressed=is_compressed(key))))]
+        list_df += [
+            pd.read_csv(
+                io.StringIO(
+                    get_text_object(bucket, key=key, compressed=is_compressed(key))
+                )
+            )
+        ]
 
     try:
         df = pd.concat(list_df).reset_index(drop=True)
     except Exception as e:
-        raise ValueError(f"Error concatenating dataframes, format : {str(e)}")
+        raise ValueError("Error concatenating dataframes") from e
 
     return df
 
@@ -202,7 +209,7 @@ def put_single_json_object(bucket: str, prefix: str, body: Dict) -> str:
     """
     clear_path(bucket, prefix)
 
-    key = os.path.join(prefix, str(uuid.uuid4()) + '.json.gz')
+    key = os.path.join(prefix, str(uuid.uuid4()) + ".json.gz")
 
     put_json_object(bucket, key=key, body=body, compress=True)
 
@@ -215,7 +222,7 @@ def put_single_pkl_object(bucket: str, prefix: str, body) -> str:
     """
     clear_path(bucket, prefix)
 
-    key = os.path.join(prefix, str(uuid.uuid4()) + '.pkl.gz')
+    key = os.path.join(prefix, str(uuid.uuid4()) + ".pkl.gz")
 
     put_pkl_object(bucket, key=key, body=body, compress=True)
 
@@ -223,7 +230,7 @@ def put_single_pkl_object(bucket: str, prefix: str, body) -> str:
 
 
 def put_multiple_csv_objects(
-        bucket: str, prefix: str, body: pd.DataFrame, size_max_mb: float = 10
+    bucket: str, prefix: str, body: pd.DataFrame, size_max_mb: float = 10
 ) -> List[str]:
     """
     Clean folder, split dataframe into multiple csv files and put them into
@@ -231,18 +238,17 @@ def put_multiple_csv_objects(
     """
     clear_path(bucket, prefix)
 
-    size_memory_mb = body.memory_usage(deep=True).sum() / (1024 ** 2)
+    size_memory_mb = body.memory_usage(deep=True).sum() / (1024**2)
     size_row_slice = int(size_max_mb / size_memory_mb * len(body))
 
     def _generate_slices(dataframe: pd.DataFrame, row_slice_size: int):
-        """Generates slices of the DataFrame based on the given row slice size.
-        """
+        """Generates slices of the DataFrame based on the given row slice size."""
         for start in range(0, len(dataframe), row_slice_size):
-            yield dataframe.iloc[start:start + row_slice_size]
+            yield dataframe.iloc[start : start + row_slice_size]
 
     list_keys = list()
-    for i, df in enumerate(_generate_slices(body, size_row_slice)):
-        key = os.path.join(prefix, str(uuid.uuid4()) + '.csv.gz')
+    for df in _generate_slices(body, max(size_row_slice, 1)):
+        key = os.path.join(prefix, str(uuid.uuid4()) + ".csv.gz")
         list_keys.append(key)
         put_text_object(bucket, key=key, body=df.to_csv(index=False), compress=True)
 
