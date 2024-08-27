@@ -59,14 +59,22 @@ def list_single_object_key(bucket: str, prefix: str) -> str:
 def list_multiple_objects_keys(bucket: str, prefix: str) -> List[str]:
     """
     Retrieve multiple file keys from an S3 bucket given a folder.
+    Uses pagination to handle large numbers of objects.
     Fails if no files are found.
     """
-    list_keys = list_objects_key(bucket, prefix)
+    s3 = client("s3")
+    paginator = s3.get_paginator('list_objects_v2')
 
-    list_keys = [path for path in list_keys if not path.endswith("/")]
+    list_keys = []
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        if 'Contents' in page:
+            for obj in page['Contents']:
+                if not obj['Key'].endswith('/'):
+                    list_keys.append(obj['Key'])
 
     if len(list_keys) == 0:
-        raise ValueError("No files found.")
+        raise ValueError(f"No files found in prefix: {prefix}")
 
     return list_keys
 
