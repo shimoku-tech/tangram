@@ -283,7 +283,7 @@ def put_multiple_csv_objects(
     bucket: str,
     prefix: str,
     body: pd.DataFrame,
-    size_max_mb: float = 10,
+    size_max_mb: float = 100,
 ) -> List[str]:
     """
     Clean folder, split dataframe into multiple csv files and put them into
@@ -311,6 +311,7 @@ def put_multiple_csv_objects(
 def get_multiple_csv_objects_threaded(
     bucket: str, 
     prefixes: list[str],
+    logger: logging.Logger | None = None
 ) -> pd.DataFrame:
     """
     Retrieve multiple csv objects from an S3 bucket given a list of prefixes and
@@ -339,7 +340,7 @@ def get_multiple_csv_objects_threaded(
             executor.submit(_get_object, key, list_df)
 
     if len(list_df) == 0:
-        raise ValueError(f"No data found")
+        raise ValueError("No data found")
 
     try:
         df = pd.concat(list_df).reset_index(drop=True)
@@ -367,7 +368,7 @@ def get_multiple_csv_objects_between_dates_threaded(
 def put_multiple_csv_objects_threaded(
     bucket: str,
     dfs: dict[str, pd.DataFrame],
-    size_max_mb: float = 10,
+    size_max_mb: float = 100,
     logger: logging.Logger | None = None
 ) -> None:
     """
