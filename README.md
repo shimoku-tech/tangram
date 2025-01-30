@@ -1,6 +1,16 @@
 # Shimoku Tangram
 A powerful Python library that simplifies data operations and file handling in S3, featuring automatic threading for high-performance data processing, smart compression, and integrated logging.
 
+## Index
+1. [Key Features](#key-features)
+2. [Installation](#installation)
+3. [Quick Start Guide](#quick-start-guide)
+4. [High-Performance Operations](#high-performance-operations)
+5. [API Reference](#api-reference)
+6. [Common Use Cases](#common-use-cases)
+7. [Meta S3 Usage](#meta-s3-usage)
+8. [License](#license)
+
 ## Key Features
 - **High Performance**: Built-in threading for parallel processing of large datasets
 - **Smart File Handling**: Automatic compression/decompression with gzip
@@ -291,6 +301,42 @@ s3.put_multiple_csv_objects_threaded(
     dfs=dfs
 )
 ~~~
+
+## Meta S3 Usage
+The `meta_s3` module provides utilities for managing metadata in S3, such as tracking the last timestamp of operations. This is particularly useful for ETL pipelines where you need to keep track of the latest processed data.
+
+### Example: Tracking Last Timestamp
+~~~python
+from datetime import datetime
+from shimoku_tangram.storage import meta_s3
+
+# Get the last timestamp from S3 metadata
+last_timestamp = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
+
+# Set the last timestamp to the current time
+new_timestamp = meta_s3.set_last_timestamp(bucket="my-bucket", prefix="data/raw")
+~~~
+
+### Use Case in ETL Pipelines
+~~~python
+# During data extraction
+last_timestamp = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
+if last_timestamp:
+    # Process only new data since the last timestamp
+    df = s3.get_multiple_csv_objects_between_dates_threaded(
+        bucket="my-bucket",
+        prefix="data/raw",
+        start_date=last_timestamp,
+        end_date=datetime.now()
+    )
+
+# After processing, update the last timestamp
+meta_s3.set_last_timestamp(bucket="my-bucket", prefix="data/raw")
+~~~
+
+### Methods
+- **`get_last_timestamp(bucket: str, prefix: str) -> str`**: Retrieves the last timestamp stored in S3 metadata.
+- **`set_last_timestamp(bucket: str, prefix: str) -> str`**: Updates the last timestamp in S3 metadata to the current time.
 
 ## License
 MIT
