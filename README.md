@@ -328,13 +328,10 @@ from shimoku_tangram.storage import s3, meta_s3
 # During data extraction
 last_timestamp_str = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
 if last_timestamp_str:
-    # Convert the timestamp string to a datetime object
-    last_timestamp = datetime.strptime(last_timestamp_str, "%Y-%m-%d:%H:%M:%S")
-    
     # Process only new data since the last timestamp
     df = s3.get_multiple_csv_objects_threaded(
         bucket="my-bucket",
-        prefix=f"data/raw/{last_timestamp}",
+        prefix=f"data/raw/{last_timestamp_str}",
     )
 
 # After processing, update the last timestamp
