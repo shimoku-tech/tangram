@@ -311,7 +311,10 @@ from datetime import datetime
 from shimoku_tangram.storage import meta_s3
 
 # Get the last timestamp from S3 metadata
-last_timestamp = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
+last_timestamp_str = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
+
+# Convert the timestamp string to a datetime object
+last_timestamp = datetime.strptime(last_timestamp_str, "%Y-%m-%d:%H:%M:%S")
 
 # Set the last timestamp to the current time
 new_timestamp = meta_s3.set_last_timestamp(bucket="my-bucket", prefix="data/raw")
@@ -319,15 +322,19 @@ new_timestamp = meta_s3.set_last_timestamp(bucket="my-bucket", prefix="data/raw"
 
 ### Use Case in ETL Pipelines
 ~~~python
+from datetime import datetime
+from shimoku_tangram.storage import s3, meta_s3
+
 # During data extraction
-last_timestamp = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
-if last_timestamp:
+last_timestamp_str = meta_s3.get_last_timestamp(bucket="my-bucket", prefix="data/raw")
+if last_timestamp_str:
+    # Convert the timestamp string to a datetime object
+    last_timestamp = datetime.strptime(last_timestamp_str, "%Y-%m-%d:%H:%M:%S")
+    
     # Process only new data since the last timestamp
-    df = s3.get_multiple_csv_objects_between_dates_threaded(
+    df = s3.get_multiple_csv_objects_threaded(
         bucket="my-bucket",
-        prefix="data/raw",
-        start_date=last_timestamp,
-        end_date=datetime.now()
+        prefix=f"data/raw/{last_timestamp}",
     )
 
 # After processing, update the last timestamp
@@ -335,8 +342,8 @@ meta_s3.set_last_timestamp(bucket="my-bucket", prefix="data/raw")
 ~~~
 
 ### Methods
-- **`get_last_timestamp(bucket: str, prefix: str) -> str`**: Retrieves the last timestamp stored in S3 metadata.
-- **`set_last_timestamp(bucket: str, prefix: str) -> str`**: Updates the last timestamp in S3 metadata to the current time.
+- **`get_last_timestamp(bucket: str, prefix: str) -> str`**: Retrieves the last timestamp stored in S3 metadata as a string in the format `"%Y-%m-%d:%H:%M:%S"`.
+- **`set_last_timestamp(bucket: str, prefix: str) -> str`**: Updates the last timestamp in S3 metadata to the current time and returns the timestamp as a string.
 
 ## License
 MIT
