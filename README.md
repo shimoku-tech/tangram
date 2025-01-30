@@ -1,4 +1,3 @@
-```
 # Shimoku Tangram
 A powerful Python library that simplifies data operations and file handling in S3, featuring automatic threading for high-performance data processing, smart compression, and integrated logging.
 
@@ -295,4 +294,3 @@ s3.put_multiple_csv_objects_threaded(
 
 ## License
 MIT
-```
