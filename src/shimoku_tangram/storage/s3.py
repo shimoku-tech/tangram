@@ -5,7 +5,6 @@ import os
 import logging
 from pathlib import Path
 import pickle
-from typing import Dict, List
 import uuid
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -42,11 +41,8 @@ def list_objects_key(bucket: str, prefix: str = "") -> list:
 
 
 def list_objects_key_between_dates(
-    bucket: str,
-    prefix: str, 
-    start_date: datetime, 
-    end_date: datetime
-) -> List[str]:
+    bucket: str, prefix: str, start_date: datetime, end_date: datetime
+) -> list[str]:
     """
     List all objects keys between two dates.
     The date is extracted from the object key, which has the following format:
@@ -54,24 +50,29 @@ def list_objects_key_between_dates(
     """
     end_date = end_date + timedelta(days=1)
     file_prefixes = []
-    for x in range(0, (end_date-start_date).days):
+    for x in range(0, (end_date - start_date).days):
         date = start_date + timedelta(days=x)
         next_date = date + timedelta(days=1)
         file_prefixes.append(f"{prefix}/{date.strftime('%Y/%m/%d')}")
 
-        if (next_date.month == 1 and next_date.day == 1 and 
-            f"{prefix}/{date.strftime('%Y')}/01" in file_prefixes):
+        if (
+            next_date.month == 1
+            and next_date.day == 1
+            and f"{prefix}/{date.strftime('%Y')}/01" in file_prefixes
+        ):
             file_prefixes = [
-                file_prefix 
-                for file_prefix in file_prefixes 
+                file_prefix
+                for file_prefix in file_prefixes
                 if not file_prefix.startswith(f"{prefix}/{date.strftime('%Y')}")
             ]
             file_prefixes.append(f"{prefix}/{date.strftime('%Y')}")
-        elif (next_date.day == 1 and 
-           f"{prefix}/{date.strftime('%Y/%m')}/01" in file_prefixes):
+        elif (
+            next_date.day == 1
+            and f"{prefix}/{date.strftime('%Y/%m')}/01" in file_prefixes
+        ):
             file_prefixes = [
-                file_prefix 
-                for file_prefix in file_prefixes 
+                file_prefix
+                for file_prefix in file_prefixes
                 if not file_prefix.startswith(f"{prefix}/{date.strftime('%Y/%m')}")
             ]
             file_prefixes.append(f"{prefix}/{date.strftime('%Y/%m')}")
@@ -107,22 +108,22 @@ def list_single_object_key(bucket: str, prefix: str) -> str:
     return list_keys[0]
 
 
-def list_multiple_objects_keys(bucket: str, prefix: str) -> List[str]:
+def list_multiple_objects_keys(bucket: str, prefix: str) -> list[str]:
     """
     Retrieve multiple file keys from an S3 bucket given a folder.
     Uses pagination to handle large numbers of objects.
     Fails if no files are found.
     """
     s3 = client("s3")
-    paginator = s3.get_paginator('list_objects_v2')
+    paginator = s3.get_paginator("list_objects_v2")
 
     list_keys = []
 
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        if 'Contents' in page:
-            for obj in page['Contents']:
-                if not obj['Key'].endswith('/'):
-                    list_keys.append(obj['Key'])
+        if "Contents" in page:
+            for obj in page["Contents"]:
+                if not obj["Key"].endswith("/"):
+                    list_keys.append(obj["Key"])
 
     if len(list_keys) == 0:
         raise ValueError(f"No files found in prefix: {prefix}")
@@ -262,7 +263,7 @@ def get_multiple_csv_objects(bucket: str, prefix: str) -> pd.DataFrame:
     return df
 
 
-def put_single_json_object(bucket: str, prefix: str, body: Dict) -> str:
+def put_single_json_object(bucket: str, prefix: str, body: dict) -> str:
     """
     Clean folder and put a single json file into such folder.
     """
@@ -293,7 +294,7 @@ def put_multiple_csv_objects(
     prefix: str,
     body: pd.DataFrame,
     size_max_mb: float = 100,
-) -> List[str]:
+) -> list[str]:
     """
     Clean folder, split dataframe into multiple csv files and put them into
     folder
@@ -312,26 +313,34 @@ def put_multiple_csv_objects(
     for df in _generate_slices(body, max(size_row_slice, 1)):
         key = os.path.join(prefix, str(uuid.uuid4()) + ".csv.gz")
         list_keys.append(key)
-        put_text_object(bucket, key=key, body=df.to_csv(index=False, quoting=csv.QUOTE_ALL), compress=True)
+        put_text_object(
+            bucket,
+            key=key,
+            body=df.to_csv(index=False, quoting=csv.QUOTE_ALL),
+            compress=True,
+        )
 
     return list_keys
 
 
 def get_multiple_csv_objects_threaded(
-    bucket: str, 
-    prefixes: list[str],
-    logger: logging.Logger | None = None
+    bucket: str, prefixes: list[str], logger: logging.Logger | None = None
 ) -> pd.DataFrame:
     """
     Retrieve multiple csv objects from an S3 bucket given a list of prefixes and
     concatenate them.
     """
+
     def _get_object(key: str, list_df: list[pd.DataFrame]):
         if logger:
             logger.info(f"Getting object {key}")
-        list_df.append(pd.read_csv(io.StringIO(
-            get_text_object(bucket, key=key, compressed=is_compressed(key))
-        )))
+        list_df.append(
+            pd.read_csv(
+                io.StringIO(
+                    get_text_object(bucket, key=key, compressed=is_compressed(key))
+                )
+            )
+        )
         if logger:
             logger.info(f"Object {key} done")
 
@@ -355,14 +364,12 @@ def get_multiple_csv_objects_threaded(
         df = pd.concat(list_df).reset_index(drop=True)
     except Exception as e:
         raise ValueError("Error concatenating dataframes") from e
-    
+
     return df
 
+
 def get_multiple_csv_objects_between_dates_threaded(
-    bucket: str,
-    prefix: str,
-    start_date: datetime,
-    end_date: datetime
+    bucket: str, prefix: str, start_date: datetime, end_date: datetime
 ) -> pd.DataFrame:
     """
     Retrieve multiple csv objects from an S3 bucket given a prefix and a
@@ -370,7 +377,9 @@ def get_multiple_csv_objects_between_dates_threaded(
     """
     list_keys = list_objects_key_between_dates(bucket, prefix, start_date, end_date)
     if len(list_keys) == 0:
-        raise ValueError(f"No data found between {start_date} and {end_date} at {prefix}")
+        raise ValueError(
+            f"No data found between {start_date} and {end_date} at {prefix}"
+        )
     return get_multiple_csv_objects_threaded(bucket, list_keys)
 
 
@@ -378,7 +387,7 @@ def put_multiple_csv_objects_threaded(
     bucket: str,
     dfs: dict[str, pd.DataFrame],
     size_max_mb: float = 100,
-    logger: logging.Logger | None = None
+    logger: logging.Logger | None = None,
 ) -> None:
     """
     Put multiple csv objects into an S3 bucket given a folder.
@@ -388,12 +397,11 @@ def put_multiple_csv_objects_threaded(
             if logger:
                 logger.info(f"Putting object {prefix}")
             executor.submit(
-                put_multiple_csv_objects, 
-                bucket, 
-                prefix, 
-                df, 
-                size_max_mb, 
+                put_multiple_csv_objects,
+                bucket,
+                prefix,
+                df,
+                size_max_mb,
             )
     if logger:
         logger.info("Upload finished")
-    

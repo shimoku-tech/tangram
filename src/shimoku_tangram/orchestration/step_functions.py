@@ -19,4 +19,3 @@ def send_task_failure(task_token: str, error_message: str):
         )
     except ClientError as e:
         print("Error sending task failure", e)
-    
